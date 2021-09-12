@@ -14,6 +14,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
  * an amount proportional to the percentage of total shares they were assigned.
  */
 contract Splitter is Ownable {
+    uint256 private _relayerShare;
     uint256 private _totalShares;
     uint256 private _totalReleased;
 
@@ -22,6 +23,9 @@ contract Splitter is Ownable {
     address payable[] private _payees;
 
     event PayeeAdded(address account, uint256 shares);
+    event PayeeUpdated(uint256 payeeId, address oldPayee, uint256 oldShares, address newPayee, uint256 newShares);
+    event PayeeRemoved(address account, uint256 shares);
+
     event PaymentReleased(address to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
 
@@ -32,12 +36,15 @@ contract Splitter is Ownable {
      * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
      * duplicates in `payees`.
      */
-    constructor(address payable[] memory payees, uint256[] memory shares_) payable {
+    constructor(uint256 relayerShare_, address payable[] memory payees, uint256[] memory shares_) payable {
         require(payees.length == shares_.length, "Splitter: payees and shares length mismatch");
         require(payees.length > 0, "Splitter: no payees");
 
+        _relayerShare = relayerShare_;
+        _totalShares = _totalShares + relayerShare_;
+
         for (uint256 i = 0; i < payees.length; i++) {
-            _addPayee(payees[i], shares_[i]);
+            addPayee(payees[i], shares_[i]);
         }
     }
 
@@ -51,11 +58,20 @@ contract Splitter is Ownable {
      * functions].
      */
     receive() external payable virtual {
+        _releaseInternal(payable(_msgSender()), _relayerShare);
+
         for (uint256 i = 0; i < _payees.length; i++) {
-            release(_payees[i]);
+            _release(_payees[i]);
         }
 
         emit PaymentReceived(_msgSender(), msg.value);
+    }
+
+    /**
+     * @dev Getter for the relayer share.
+     */
+    function relayerShare() public view returns (uint256) {
+        return _relayerShare;
     }
 
     /**
@@ -97,13 +113,13 @@ contract Splitter is Ownable {
      * @dev Triggers a transfer to `account` of the amount of Ether they are owed, according to their percentage of the
      * total shares and their previous withdrawals.
      */
-    function release(address payable account) public virtual {
-        require(_shares[account] > 0, "PaymentSplitter: account has no shares");
+    function _release(address payable account) internal {
+        _releaseInternal(account, _shares[account]);
+    }
 
+    function _releaseInternal(address payable account, uint256 share) internal {
         uint256 totalReceived = address(this).balance + _totalReleased;
-        uint256 payment = (totalReceived * _shares[account]) / _totalShares - _released[account];
-
-        require(payment != 0, "PaymentSplitter: account is not due payment");
+        uint256 payment = (totalReceived * share) / _totalShares - _released[account];
 
         _released[account] = _released[account] + payment;
         _totalReleased = _totalReleased + payment;
@@ -118,15 +134,33 @@ contract Splitter is Ownable {
      * @param account The address of the payee to add.
      * @param shares_ The number of shares owned by the payee.
      */
-    function _addPayee(address payable account, uint256 shares_) public onlyOwner {
+    function addPayee(address payable account, uint256 shares_) public onlyOwner {
         require(account != address(0), "PaymentSplitter: account is the zero address");
-        require(shares_ > 0, "PaymentSplitter: shares are 0");
-        require(_shares[account] == 0, "PaymentSplitter: account already has shares");
 
         _payees.push(account);
         _shares[account] = shares_;
         _totalShares = _totalShares + shares_;
 
         emit PayeeAdded(account, shares_);
+    }
+
+    /**
+     * @dev Update a payee to the contract (for only owner).
+     * @param payeeId The payee Id in array of the payee to update.
+     * @param newPayee The address of the payee to update.
+     * @param newShares_ The number of shares owned by the payee.
+     */
+    function updatePayee(uint256 payeeId, address payable newPayee, uint256 newShares_) public onlyOwner {
+        require(newPayee != address(0), "PaymentSplitter: newPayee is the zero address");
+        require(payeeId < _payees.length, "PaymentSplitter: payeeId is more than payees length");
+
+        address oldPayee = _payees[payeeId];
+        _payees[payeeId] = newPayee;
+
+        uint256 oldShares = _shares[_payees[payeeId]];
+        _totalShares = _totalShares - oldShares + newShares_;
+        _shares[newPayee] = newShares_;
+
+        emit PayeeUpdated(payeeId, oldPayee, oldShares, newPayee, newShares_);
     }
 }
