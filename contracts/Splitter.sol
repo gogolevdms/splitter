@@ -47,16 +47,11 @@ contract Splitter is Ownable {
     }
 
     /**
-     * @dev The Ether received will be logged with {PaymentReceived} events. Note that these events are not fully
-     * reliable: it's possible for a contract to receive Ether without triggering this function. This only affects the
-     * reliability of the events, and not the actual splitting of Ether.
-     *
-     * To learn more about this see the Solidity documentation for
-     * https://solidity.readthedocs.io/en/latest/contracts.html#fallback-function[fallback
-     * functions].
+     * @dev The Ether received will be logged with {PaymentReceived} events.
+     * @param relayer The address of the relayer.
      */
-    receive() external payable virtual {
-        _releaseInternal(payable(_msgSender()), _relayerShare);
+    function forward(address payable relayer) external payable {
+        _releaseInternal(relayer, _relayerShare);
 
         for (uint256 i = 0; i < _payees.length; i++) {
             _release(_payees[i]);
