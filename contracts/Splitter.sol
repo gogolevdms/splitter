@@ -16,10 +16,8 @@ import "@openzeppelin/contracts/utils/Address.sol";
 contract Splitter is Ownable {
     uint256 private _relayerShare;
     uint256 private _totalShares;
-    uint256 private _totalReleased;
 
     mapping(address => uint256) private _shares;
-    mapping(address => uint256) private _released;
     address payable[] private _payees;
 
     event PayeeAdded(address account, uint256 shares);
@@ -82,24 +80,10 @@ contract Splitter is Ownable {
     }
 
     /**
-     * @dev Getter for the total amount of Ether already released.
-     */
-    function totalReleased() public view returns (uint256) {
-        return _totalReleased;
-    }
-
-    /**
      * @dev Getter for the amount of shares held by an account.
      */
     function shares(address account) public view returns (uint256) {
         return _shares[account];
-    }
-
-    /**
-     * @dev Getter for the amount of Ether already released to a payee.
-     */
-    function released(address account) public view returns (uint256) {
-        return _released[account];
     }
 
     /**
@@ -125,11 +109,7 @@ contract Splitter is Ownable {
     }
 
     function _releaseInternal(address payable account, uint256 share) internal {
-        uint256 totalReceived = address(this).balance + _totalReleased;
-        uint256 payment = (totalReceived * share) / _totalShares - _released[account];
-
-        _released[account] = _released[account] + payment;
-        _totalReleased = _totalReleased + payment;
+        uint256 payment = (msg.value * share) / _totalShares;
 
         Address.sendValue(account, payment);
 
