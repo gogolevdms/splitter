@@ -3,7 +3,7 @@
 pragma solidity ^0.8.7;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-
+import "@openzeppelin/contracts/utils/Address.sol";
 /**
  * @title Splitter
  * @dev This contract allows to split Ether payments among a group of accounts. The sender does not need to be aware
@@ -19,7 +19,7 @@ contract Splitter is Ownable {
 
     mapping(address => uint256) private _shares;
     mapping(address => uint256) private _released;
-    address[] private _payees;
+    address payable[] private _payees;
 
     event PayeeAdded(address account, uint256 shares);
     event PaymentReleased(address to, uint256 amount);
@@ -32,7 +32,7 @@ contract Splitter is Ownable {
      * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
      * duplicates in `payees`.
      */
-    constructor(address[] memory payees, uint256[] memory shares_) payable {
+    constructor(address payable[] memory payees, uint256[] memory shares_) payable {
         require(payees.length == shares_.length, "Splitter: payees and shares length mismatch");
         require(payees.length > 0, "Splitter: no payees");
 
@@ -51,6 +51,10 @@ contract Splitter is Ownable {
      * functions].
      */
     receive() external payable virtual {
+        for (uint256 i = 0; i < _payees.length; i++) {
+            release(_payees[i]);
+        }
+
         emit PaymentReceived(_msgSender(), msg.value);
     }
 
@@ -110,11 +114,11 @@ contract Splitter is Ownable {
     }
 
     /**
-     * @dev Add a new payee to the contract.
+     * @dev Add a new payee to the contract (for only owner).
      * @param account The address of the payee to add.
      * @param shares_ The number of shares owned by the payee.
      */
-    function _addPayee(address account, uint256 shares_) private {
+    function _addPayee(address payable account, uint256 shares_) public onlyOwner {
         require(account != address(0), "PaymentSplitter: account is the zero address");
         require(shares_ > 0, "PaymentSplitter: shares are 0");
         require(_shares[account] == 0, "PaymentSplitter: account already has shares");
