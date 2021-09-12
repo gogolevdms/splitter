@@ -23,8 +23,8 @@ contract Splitter is Ownable {
     address payable[] private _payees;
 
     event PayeeAdded(address account, uint256 shares);
-    event PayeeUpdated(uint256 payeeId, address oldPayee, uint256 oldShares, address newPayee, uint256 newShares);
-    event PayeeRemoved(address account, uint256 shares);
+    event PayeeUpdated(uint256 payeeId, address payable oldPayee, uint256 oldShares, address payable newPayee, uint256 newShares);
+    event PayeeRemoved(uint256 payeeId, address payable payee, uint256 shares);
 
     event PaymentReleased(address to, uint256 amount);
     event PaymentReceived(address from, uint256 amount);
@@ -36,15 +36,15 @@ contract Splitter is Ownable {
      * All addresses in `payees` must be non-zero. Both arrays must have the same non-zero length, and there must be no
      * duplicates in `payees`.
      */
-    constructor(uint256 relayerShare_, address payable[] memory payees, uint256[] memory shares_) payable {
-        require(payees.length == shares_.length, "Splitter: payees and shares length mismatch");
-        require(payees.length > 0, "Splitter: no payees");
+    constructor(uint256 relayerShare_, address payable[] memory payees_, uint256[] memory shares_) payable {
+        require(payees_.length > 0, "Splitter: no payees");
+        require(payees_.length == shares_.length, "Splitter: payees and shares length mismatch");
 
         _relayerShare = relayerShare_;
         _totalShares = _totalShares + relayerShare_;
 
-        for (uint256 i = 0; i < payees.length; i++) {
-            addPayee(payees[i], shares_[i]);
+        for (uint256 i = 0; i < payees_.length; i++) {
+            addPayee(payees_[i], shares_[i]);
         }
     }
 
@@ -110,6 +110,13 @@ contract Splitter is Ownable {
     }
 
     /**
+     * @dev Getter the payee array.
+     */
+    function payees() public view returns (address payable[] memory) {
+        return _payees;
+    }
+
+    /**
      * @dev Triggers a transfer to `account` of the amount of Ether they are owed, according to their percentage of the
      * total shares and their previous withdrawals.
      */
@@ -154,13 +161,35 @@ contract Splitter is Ownable {
         require(newPayee != address(0), "PaymentSplitter: newPayee is the zero address");
         require(payeeId < _payees.length, "PaymentSplitter: payeeId is more than payees length");
 
-        address oldPayee = _payees[payeeId];
+        address payable oldPayee = _payees[payeeId];
         _payees[payeeId] = newPayee;
 
-        uint256 oldShares = _shares[_payees[payeeId]];
+        uint256 oldShares = _shares[oldPayee];
         _totalShares = _totalShares - oldShares + newShares_;
         _shares[newPayee] = newShares_;
 
         emit PayeeUpdated(payeeId, oldPayee, oldShares, newPayee, newShares_);
     }
+
+    /**
+     * @dev Remove a payee to the contract (for only owner).
+     * @param payeeId The payee Id in array of the payee to remove.
+     */
+    function removePayee(uint256 payeeId) public onlyOwner {
+        require(payeeId < _payees.length, "PaymentSplitter: payeeId is more than payees length");
+
+        uint lastId = _payees.length - 1;
+
+        address payable lastPayee = _payees[payeeId];
+        uint256 lastShares = _shares[lastPayee];
+        _payees.pop();
+        _totalShares = _totalShares - lastShares;
+
+        emit PayeeRemoved(lastId, lastPayee, lastShares);
+
+        if (lastId != payeeId) {
+            updatePayee(payeeId, lastPayee, lastShares);
+        }
+    }
+
 }
